@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CardioBit - Dashboard de Monitor Cardíaco micro:bit & KY-039</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+
+        @keyframes pulse-heart {
+            0% { transform: scale(1); }
+            14% { transform: scale(1.25); }
+            28% { transform: scale(1); }
+            42% { transform: scale(1.15); }
+            70% { transform: scale(1); }
+        }
+        
+        .anim-heartbeat {
+            animation: pulse-heart 1s infinite ease-in-out;
+            transform-origin: center;
+        }
+
+        .glow-red {
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.4);
+        }
+
+        /* Glassmorphism */
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col justify-between overflow-x-hidden bg-slate-950 text-slate-100">
+
+    <!-- Header Navigation -->
+    <header class="border-b border-slate-800 bg-slate-900/80 sticky top-0 z-50 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-red-500/20 text-red-500 rounded-xl border border-red-500/30">
+                    <i data-lucide="activity" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight tracking-wide flex items-center gap-2">
+                        CardioBit <span class="text-xs bg-red-500/20 text-red-400 font-mono px-2 py-0.5 rounded-full border border-red-500/30">KY-039</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Plataforma Biomédica Web Serial para BBC micro:bit</p>
+                </div>
+            </div>
+
+            <!-- Header Action Controls -->
+            <div class="flex items-center gap-3">
+                <button id="btn-sim" onclick="toggleSimulation()" class="text-xs font-medium px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-2 border border-slate-700">
+                    <i data-lucide="cpu" class="w-4 h-4"></i>
+                    <span id="sim-text">Modo Simulación</span>
+                </button>
+                <button id="btn-connect" onclick="connectWebSerial()" class="text-sm font-semibold px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/30 transition flex items-center gap-2">
+                    <i data-lucide="usb" class="w-4 h-4"></i>
+                    <span>Conectar micro:bit</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+        <!-- Status Banner -->
+        <div id="status-banner" class="rounded-xl p-4 bg-slate-900/60 border border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <div class="flex items-center gap-3">
+                <span id="status-dot" class="w-3 h-3 rounded-full bg-slate-600"></span>
+                <span id="status-text" class="font-medium text-slate-300">Estado: Desconectado. Haz clic en "Conectar micro:bit" para iniciar la recepción por Web Serial.</span>
+            </div>
+            <div class="hidden sm:flex items-center gap-4 font-mono">
+                <span>BAUD: <strong class="text-slate-200">115200</strong></span>
+                <span>PUERTO: <strong id="port-label" class="text-slate-200">NINGUNO</strong></span>
+            </div>
+        </div>
+
+        <!-- Top Metrics Section -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- BPM Metric Card -->
+            <div class="glass-card rounded-2xl p-6 relative overflow-hidden flex flex-col justify-between shadow-xl">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i data-lucide="heart" class="w-4 h-4 text-red-500"></i> Frecuencia Cardíaca
+                    </span>
+                    <span id="bpm-badge" class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                        Normal
+                    </span>
+                </div>
+
+                <div class="my-4 flex items-baseline gap-3">
+                    <span id="bpm-value" class="text-6xl font-extrabold tracking-tight text-white font-mono">--</span>
+                    <span class="text-xl font-medium text-slate-400">BPM</span>
+                </div>
+
+                <!-- Animated Heart Visualizer -->
+                <div class="flex items-center gap-3 pt-2 border-t border-slate-800/80">
+                    <div id="heart-icon-wrapper" class="p-2 rounded-xl bg-red-500/10 text-red-500">
+                        <i data-lucide="heart" id="heart-icon" class="w-6 h-6 fill-current"></i>
+                    </div>
+                    <div class="text-xs text-slate-400">
+                        <p id="heart-status-desc">Esperando señal de pulso sanguíneo...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signal & Threshold Metric Card -->
+            <div class="glass-card rounded-2xl p-6 flex flex-col justify-between shadow-xl">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i data-lucide="sliders" class="w-4 h-4 text-blue-400"></i> Lectura Raw KY-039
+                    </span>
+                    <span class="text-xs text-slate-500 font-mono">ADC: 0-1023</span>
+                </div>
+
+                <div class="my-4">
+                    <div class="flex justify-between items-baseline mb-2">
+                        <span class="text-xs text-slate-400">Valor Analógico Actual:</span>
+                        <span id="raw-value" class="text-3xl font-bold font-mono text-slate-100">0</span>
+                    </div>
+                    <!-- Signal Level Meter -->
+                    <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700/50">
+                        <div id="raw-bar" class="bg-blue-500 h-full w-0 transition-all duration-75"></div>
+                    </div>
+                </div>
+
+                <div class="space-y-2 pt-2 border-t border-slate-800/80 text-xs">
+                    <div class="flex justify-between text-slate-400">
+                        <span>Umbral Configurado:</span>
+                        <span id="threshold-val-label" class="font-mono text-slate-200">600</span>
+                    </div>
+                    <input type="range" id="threshold-slider" min="100" max="900" value="600" oninput="updateThreshold(this.value)" class="w-full accent-red-500 bg-slate-800 rounded-lg cursor-pointer">
+                </div>
+            </div>
+
+            <!-- System Info & Stats -->
+            <div class="glass-card rounded-2xl p-6 flex flex-col justify-between shadow-xl">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i data-lucide="shield-check" class="w-4 h-4 text-purple-400"></i> Métricas de Sesión
+                    </span>
+                    <button onclick="clearLogs()" class="text-xs text-slate-400 hover:text-white transition">Limpiar</button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 my-3">
+                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                        <span class="text-xs text-slate-400 block mb-1">Mínimo Registrado</span>
+                        <span id="min-bpm" class="text-xl font-bold font-mono text-slate-200">--</span> <span class="text-xs text-slate-500">BPM</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                        <span class="text-xs text-slate-400 block mb-1">Máximo Registrado</span>
+                        <span id="max-bpm" class="text-xl font-bold font-mono text-slate-200">--</span> <span class="text-xs text-slate-500">BPM</span>
+                    </div>
+                </div>
+
+                <button onclick="exportCSV()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition flex items-center justify-center gap-2">
+                    <i data-lucide="download" class="w-4 h-4"></i> Exportar Datos (.CSV)
+                </button>
+            </div>
+
+        </div>
+
+        <!-- Waveform Realtime Chart Section -->
+        <div class="glass-card rounded-2xl p-6 shadow-xl">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                        <i data-lucide="waveform" class="w-5 h-5 text-red-500"></i> Pletismograma en Tiempo Real
+                    </h2>
+                    <p class="text-xs text-slate-400">Variación de la señal infrarroja del sensor KY-039 recibida por micro:bit</p>
+                </div>
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
+                    <span class="text-slate-400">Señal Fotopletismográfica (PPG)</span>
+                </div>
+            </div>
+
+            <!-- Chart Canvas Container -->
+            <div class="relative w-full h-64 sm:h-80">
+                <canvas id="pulseChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Guide & Deploy Instructions -->
+        <div class="glass-card rounded-2xl p-6 shadow-xl space-y-4">
+            <h2 class="text-base font-bold text-slate-100 flex items-center gap-2 border-b border-slate-800 pb-3">
+                <i data-lucide="book-open" class="w-5 h-5 text-amber-400"></i> Guía Didáctica y Publicación en GitHub Pages
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-slate-300">
+                
+                <!-- MakeCode Setup Step -->
+                <div class="space-y-2">
+                    <h3 class="font-semibold text-slate-100 flex items-center gap-2 text-xs uppercase tracking-wider text-amber-400">
+                        1. Formato de datos en MakeCode (micro:bit)
+                    </h3>
+                    <p class="text-xs text-slate-400 leading-relaxed">
+                        Para que este Dashboard lea tus datos por puerto Serie, asegúrate de que tu micro:bit envíe la palabra clave <code class="bg-slate-800 px-1.5 py-0.5 rounded text-red-400 font-mono">Pulso</code> mediante el bloque de serie:
+                    </p>
+                    <pre class="bg-slate-900 p-3 rounded-xl border border-slate-800 text-xs font-mono text-emerald-400 overflow-x-auto">
+serial.writeValue("Pulso", pins.analogReadPin(AnalogPin.P0))</pre>
+                </div>
+
+                <!-- GitHub Pages Deploy Step -->
+                <div class="space-y-2">
+                    <h3 class="font-semibold text-slate-100 flex items-center gap-2 text-xs uppercase tracking-wider text-amber-400">
+                        2. ¿Cómo subir este Dashboard a GitHub Pages?
+                    </h3>
+                    <ol class="list-decimal list-inside text-xs text-slate-400 space-y-1">
+                        <li>Crea un nuevo repositorio en GitHub llamado <code class="text-slate-200 font-mono">mi-cardiobit</code>.</li>
+                        <li>Sube este archivo guardándolo con el nombre exacto <code class="text-slate-200 font-mono">index.html</code>.</li>
+                        <li>Ve a <strong>Settings &gt; Pages</strong> en tu repositorio.</li>
+                        <li>En <em>Branch</em>, selecciona <code class="text-slate-200 font-mono">main</code> y guarda. ¡Tu web estará online en minutos!</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 bg-slate-950 py-4 text-center text-xs text-slate-500">
+        <p>CardioBit Dashboard — Proyecto Educativo para Tecnología, Biometría y Robótica Escolar.</p>
+    </footer>
+
+    <!-- Logic Script -->
+    <script>
+        // System Global State Variables
+        let port, reader;
+        let isSimulating = false;
+        let simInterval = null;
+        let threshold = 600;
+        let ppgDataBuffer = [];
+        let bpmHistory = [];
+        let lastBeatTime = 0;
+        let beatIntervals = [];
+
+        // DOM Element Cache
+        const bpmValEl = document.getElementById('bpm-value');
+        const bpmBadgeEl = document.getElementById('bpm-badge');
+        const rawValEl = document.getElementById('raw-value');
+        const rawBarEl = document.getElementById('raw-bar');
+        const heartIcon = document.getElementById('heart-icon');
+        const heartStatusDesc = document.getElementById('heart-status-desc');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const portLabel = document.getElementById('port-label');
+
+        // Initialize Chart.js Plethysmogram
+        const ctx = document.getElementById('pulseChart').getContext('2d');
+        const maxDataPoints = 60;
+        const initialLabels = Array(maxDataPoints).fill('');
+        const initialData = Array(maxDataPoints).fill(500);
+
+        const pulseChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: initialLabels,
+                datasets: [{
+                    label: 'Señal PPG (Raw)',
+                    data: initialData,
+                    borderColor: '#ef4444',
+                    borderWidth: 2.5,
+                    pointRadius: 0,
+                    tension: 0.35,
+                    fill: true,
+                    backgroundColor: (context) => {
+                        const bgCtx = context.chart.ctx;
+                        const gradient = bgCtx.createLinearGradient(0, 0, 0, 300);
+                        gradient.addColorStop(0, 'rgba(239, 68, 68, 0.3)');
+                        gradient.addColorStop(1, 'rgba(239, 68, 68, 0)');
+                        return gradient;
+                    }
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: { display: false },
+                    y: {
+                        min: 0,
+                        max: 1023,
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#64748b', font: { family: 'Inter', size: 10 } }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                }
+            }
+        });
+
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Web Serial API Handler
+        async function connectWebSerial() {
+            if (!("serial" in navigator)) {
+                alert("Tu navegador no soporta Web Serial API. Por favor usa Google Chrome, Microsoft Edge o Opera.");
+                return;
+            }
+
+            try {
+                if (isSimulating) toggleSimulation();
+
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+
+                statusDot.className = "w-3 h-3 rounded-full bg-emerald-500 animate-pulse";
+                statusText.innerText = "Conectado exitosamente a la micro:bit por Web Serial.";
+                portLabel.innerText = "USB SERIE";
+
+                const decoder = new TextDecoderStream();
+                const inputDone = port.readable.pipeTo(decoder.writable);
+                const inputStream = decoder.readable;
+                reader = inputStream.getReader();
+
+                readSerialLoop();
+            } catch (err) {
+                console.error("Error al conectar puerto serie:", err);
+                statusText.innerText = "Error o conexión cancelada por el usuario.";
+            }
+        }
+
+        // Serial Stream Processing Loop
+        async function readSerialLoop() {
+            let lineBuffer = "";
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) {
+                    reader.releaseLock();
+                    break;
+                }
+                if (value) {
+                    lineBuffer += value;
+                    const lines = lineBuffer.split("\n");
+                    lineBuffer = lines.pop(); // Keep incomplete line fragment
+
+                    for (let line of lines) {
+                        processIncomingLine(line.trim());
+                    }
+                }
+            }
+        }
+
+        // Process incoming string lines from micro:bit
+        function processIncomingLine(line) {
+            // Expected format: "Pulso:620" or just raw number "620"
+            let rawValue = null;
+
+            if (line.includes(":")) {
+                const parts = line.split(":");
+                if (parts[0].trim().toLowerCase() === "pulso" || parts[0].trim().toLowerCase() === "pulse") {
+                    rawValue = parseInt(parts[1].trim());
+                }
+            } else if (!isNaN(parseInt(line))) {
+                rawValue = parseInt(line);
+            }
+
+            if (rawValue !== null && !isNaN(rawValue)) {
+                handleNewSensorReading(rawValue);
+            }
+        }
+
+        // Handle Signal Processing & BPM Calculation
+        function handleNewSensorReading(val) {
+            // Clamp 0-1023
+            val = Math.max(0, Math.min(1023, val));
+
+            // Update UI Raw meters
+            rawValEl.innerText = val;
+            rawBarEl.style.width = `${(val / 1023) * 100}%`;
+
+            // Update Chart
+            const currentData = pulseChart.data.datasets[0].data;
+            currentData.shift();
+            currentData.push(val);
+            pulseChart.update('none');
+
+            // Beat Detection Algorithm based on dynamic threshold
+            const now = Date.now();
+            if (val > threshold && (now - lastBeatTime) > 350) { // Min 350ms between beats (max 170 BPM)
+                if (lastBeatTime !== 0) {
+                    const interval = now - lastBeatTime;
+                    beatIntervals.push(interval);
+                    if (beatIntervals.length > 5) beatIntervals.shift();
+
+                    // Calculate average BPM
+                    const avgInterval = beatIntervals.reduce((a, b) => a + b, 0) / beatIntervals.length;
+                    const calculatedBpm = Math.round(60000 / avgInterval);
+
+                    updateBPMDisplay(calculatedBpm);
+                }
+                lastBeatTime = now;
+                triggerBeatVisual();
+            }
+        }
+
+        // Visual Heart Beat Effect
+        function triggerBeatVisual() {
+            heartIcon.classList.add('anim-heartbeat');
+            heartStatusDesc.innerText = "¡Pulso detectado en tiempo real!";
+            setTimeout(() => {
+                heartIcon.classList.remove('anim-heartbeat');
+            }, 300);
+        }
+
+        // Update BPM Metrics and Classifications
+        function updateBPMDisplay(bpm) {
+            if (bpm < 40 || bpm > 180) return; // Filter out outliers
+
+            bpmValEl.innerText = bpm;
+            bpmHistory.push(bpm);
+
+            // Min & Max Stats
+            document.getElementById('min-bpm').innerText = Math.min(...bpmHistory);
+            document.getElementById('max-bpm').innerText = Math.max(...bpmHistory);
+
+            // Health Status Badges
+            if (bpm >= 60 && bpm <= 100) {
+                bpmBadgeEl.className = "text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium";
+                bpmBadgeEl.innerText = "Normal (Reposo)";
+            } else if (bpm > 100) {
+                bpmBadgeEl.className = "text-xs px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium";
+                bpmBadgeEl.innerText = "Elevado / Ejercicio";
+            } else {
+                bpmBadgeEl.className = "text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium";
+                bpmBadgeEl.innerText = "Bajo (Bradicardia)";
+            }
+        }
+
+        // Slider Threshold Handler
+        function updateThreshold(val) {
+            threshold = parseInt(val);
+            document.getElementById('threshold-val-label').innerText = val;
+        }
+
+        // Simulation Mode (For testing without physical hardware)
+        function toggleSimulation() {
+            isSimulating = !isSimulating;
+            const simBtn = document.getElementById('btn-sim');
+            const simText = document.getElementById('sim-text');
+
+            if (isSimulating) {
+                simBtn.classList.replace('bg-slate-800', 'bg-amber-600');
+                simText.innerText = "Detener Simulación";
+                statusDot.className = "w-3 h-3 rounded-full bg-amber-500 animate-pulse";
+                statusText.innerText = "Modo simulación activo: Generando datos de ritmo cardíaco sintéticos.";
+                portLabel.innerText = "SIMULADOR";
+
+                let simAngle = 0;
+                simInterval = setInterval(() => {
+                    simAngle += 0.2;
+                    // Base baseline signal + simulated ECG pulse spike
+                    let base = 300 + Math.sin(simAngle) * 50;
+                    if (Math.random() > 0.85) {
+                        base += 400 + Math.random() * 100; // Simulated Heartbeat Spike
+                    }
+                    handleNewSensorReading(Math.round(base));
+                }, 50);
+
+            } else {
+                clearInterval(simInterval);
+                simBtn.classList.replace('bg-amber-600', 'bg-slate-800');
+                simText.innerText = "Modo Simulación";
+                statusDot.className = "w-3 h-3 rounded-full bg-slate-600";
+                statusText.innerText = "Estado: Desconectado.";
+                portLabel.innerText = "NINGUNO";
+            }
+        }
+
+        // Clear Session Stats
+        function clearLogs() {
+            bpmHistory = [];
+            beatIntervals = [];
+            bpmValEl.innerText = "--";
+            document.getElementById('min-bpm').innerText = "--";
+            document.getElementById('max-bpm').innerText = "--";
+            bpmBadgeEl.innerText = "Esperando";
+            bpmBadgeEl.className = "text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 font-medium";
+        }
+
+        // Export Data Log as CSV File
+        function exportCSV() {
+            if (bpmHistory.length === 0) {
+                alert("No hay registros de BPM suficientes para exportar.");
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,Muestra,BPM\n";
+            bpmHistory.forEach((bpm, index) => {
+                csvContent += `${index + 1},${bpm}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `registro_cardiobit_${Date.now()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
